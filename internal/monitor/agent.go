@@ -33,12 +33,10 @@ type AgentMonitor struct {
 
 // NewAgentMonitor creates a new agent monitor.
 func NewAgentMonitor(screen lcd.Screen, brightness int, interval time.Duration, logger *slog.Logger) *AgentMonitor {
-	fonts := FontConfig{
-		Path:   "res/fonts/jetbrains-mono/JetBrainsMono-Regular.ttf",
-		Small:  14,
-		Normal: 16,
-		Large:  20,
-	}
+	fonts := DefaultFontConfig()
+	fonts.Small = 14
+	fonts.Normal = 16
+	fonts.Large = 20
 
 	base := NewBase(Config{
 		Screen:   screen,
@@ -94,8 +92,8 @@ func (m *AgentMonitor) Stop() {
 }
 
 func (m *AgentMonitor) setupLayout() {
-	yStart := 65
-	availableHeight := m.Height() - yStart - 10
+	yStart := 60
+	availableHeight := m.Height() - yStart - 15
 	m.rowHeight = availableHeight / m.numRows
 	if m.rowHeight < 45 {
 		m.rowHeight = 45
@@ -110,7 +108,7 @@ func (m *AgentMonitor) drawStatic() {
 	r.DrawLine(0, 32, float64(m.Width()))
 
 	// Row separators
-	yStart := 65
+	yStart := 60
 	for i := 0; i <= m.numRows; i++ {
 		y := float64(yStart + i*m.rowHeight - 2)
 		r.DrawLine(0, y, float64(m.Width()))
@@ -165,7 +163,7 @@ func (m *AgentMonitor) update() error {
 	}
 
 	// Agent rows
-	yStart := 65
+	yStart := 60
 	for i := 0; i < m.numRows; i++ {
 		rowY := yStart + i*m.rowHeight
 		reg := Region{0, rowY, m.Width(), m.rowHeight}
@@ -238,7 +236,7 @@ func (m *AgentMonitor) renderAgentRow(r *Renderer, reg Region, agent *agentstat.
 	}
 	r.DrawCircle(circleX, circleY, circleRadius, statusColor)
 
-	// Agent name and project
+	// Agent name and project (top row)
 	xText := float64(reg.X + 35)
 	title := agent.Agent
 	if agent.Project != "" {
@@ -251,7 +249,7 @@ func (m *AgentMonitor) renderAgentRow(r *Renderer, reg Region, agent *agentstat.
 	if len(title) > 35 {
 		title = title[:35]
 	}
-	r.DrawText(xText, float64(reg.Y+2), title, m.fonts.Normal, textColor)
+	r.DrawText(xText, float64(reg.Y), title, m.fonts.Normal, textColor)
 
 	// Model (top right)
 	if agent.Model != "" {
@@ -263,7 +261,7 @@ func (m *AgentMonitor) renderAgentRow(r *Renderer, reg Region, agent *agentstat.
 		if len(model) > 20 {
 			model = model[:20]
 		}
-		r.DrawTextRight(float64(m.Width()-5-100), float64(reg.Y+2), 100, model, m.fonts.Small, m.Colors().TextDim)
+		r.DrawTextRight(float64(m.Width()-5-100), float64(reg.Y), 100, model, m.fonts.Small, m.Colors().TextDim)
 	}
 
 	// Current task (middle row)
@@ -272,15 +270,15 @@ func (m *AgentMonitor) renderAgentRow(r *Renderer, reg Region, agent *agentstat.
 		if len(task) > 50 {
 			task = task[:50]
 		}
-		r.DrawText(xText, float64(reg.Y+20), task, m.fonts.Small, textColor)
+		r.DrawText(xText, float64(reg.Y+16), task, m.fonts.Small, textColor)
 	}
 
 	// Tools info (bottom left)
 	if agent.Tools != nil {
 		if agent.Tools.Active != "" {
-			r.DrawText(xText, float64(reg.Y+36), "▶ "+agent.Tools.Active, m.fonts.Small, m.Colors().Header)
+			r.DrawText(xText, float64(reg.Y+30), "▶ "+agent.Tools.Active, m.fonts.Small, m.Colors().Header)
 		} else if len(agent.Tools.Recent) > 0 {
-			r.DrawText(xText, float64(reg.Y+36), "◦ "+agent.Tools.Recent[len(agent.Tools.Recent)-1], m.fonts.Small, m.Colors().TextDim)
+			r.DrawText(xText, float64(reg.Y+30), "◦ "+agent.Tools.Recent[len(agent.Tools.Recent)-1], m.fonts.Small, m.Colors().TextDim)
 		}
 	}
 
@@ -289,19 +287,19 @@ func (m *AgentMonitor) renderAgentRow(r *Renderer, reg Region, agent *agentstat.
 		tokText := fmt.Sprintf("↓%s ↑%s",
 			agentstat.FormatTokens(agent.Tokens.Input),
 			agentstat.FormatTokens(agent.Tokens.Output))
-		r.DrawText(180, float64(reg.Y+36), tokText, m.fonts.Small, m.Colors().TextDim)
+		r.DrawText(180, float64(reg.Y+30), tokText, m.fonts.Small, m.Colors().TextDim)
 	}
 
 	// Cost (bottom right)
 	if agent.CostUSD > 0 {
-		r.DrawTextRight(float64(m.Width()-5-60), float64(reg.Y+36), 60,
+		r.DrawTextRight(float64(m.Width()-5-60), float64(reg.Y+30), 60,
 			agentstat.FormatCost(agent.CostUSD), m.fonts.Small, m.Colors().TextDim)
 	}
 
 	// Age indicator for stale
 	if agent.Stale {
 		ageText := fmt.Sprintf("%ds ago", int(agent.Age.Seconds()))
-		r.DrawTextRight(float64(m.Width()-5-80), float64(reg.Y+20), 80, ageText, m.fonts.Small, m.Colors().TextDim)
+		r.DrawTextRight(float64(m.Width()-5-80), float64(reg.Y+16), 80, ageText, m.fonts.Small, m.Colors().TextDim)
 	}
 }
 

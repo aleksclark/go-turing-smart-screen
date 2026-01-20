@@ -1,0 +1,20 @@
+[Unit]
+Description=Turing Smart Screen System Monitor
+After=network.target
+Wants=dev-lcd\x2dcpu.device dev-lcd\x2dram.device dev-lcd\x2dagent.device
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/turing-screens --brightness 30 --cpu-port /dev/lcd-cpu --ram-port /dev/lcd-ram --agent-port /dev/lcd-agent
+Restart=on-failure
+RestartSec=5
+User=root
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -2,7 +2,6 @@
 package sysinfo
 
 import (
-	"os"
 	"regexp"
 	"sort"
 
@@ -220,47 +219,31 @@ func FormatBytes(b uint64) string {
 	)
 	switch {
 	case b >= GB:
-		return formatFloat(float64(b)/GB, 1) + "G"
+		return formatFloat1(float64(b)/GB) + "G"
 	case b >= MB:
-		return formatFloat(float64(b)/MB, 0) + "M"
+		return itoa(int(float64(b)/MB+0.5)) + "M"
 	case b >= KB:
-		return formatFloat(float64(b)/KB, 0) + "K"
+		return itoa(int(float64(b)/KB+0.5)) + "K"
 	default:
-		return formatFloat(float64(b), 0) + "B"
+		return itoa(int(b)) + "B"
 	}
 }
 
-func formatFloat(f float64, decimals int) string {
-	if decimals == 0 {
-		return os.Expand("$v", func(s string) string { return "" })
-	}
-	// Simple formatting
-	switch decimals {
-	case 1:
-		return sprintf("%.1f", f)
-	default:
-		return sprintf("%.0f", f)
-	}
-}
-
-func sprintf(format string, a ...any) string {
-	// Simple sprintf replacement
-	switch format {
-	case "%.1f":
-		v := a[0].(float64)
-		i := int(v * 10)
-		return string(rune('0'+i/10)) + "." + string(rune('0'+i%10))
-	case "%.0f":
-		v := a[0].(float64)
-		return itoa(int(v))
-	default:
-		return ""
-	}
+// formatFloat1 formats a float with 1 decimal place.
+func formatFloat1(f float64) string {
+	// Round to 1 decimal
+	i := int(f*10 + 0.5)
+	whole := i / 10
+	frac := i % 10
+	return itoa(whole) + "." + string(rune('0'+frac))
 }
 
 func itoa(i int) string {
 	if i == 0 {
 		return "0"
+	}
+	if i < 0 {
+		return "-" + itoa(-i)
 	}
 	s := ""
 	for i > 0 {

@@ -196,7 +196,7 @@ func (d *Display) Reset() error {
 		d.port.Close()
 		d.port = nil
 	}
-	time.Sleep(5 * time.Second)
+	time.Sleep(1 * time.Second)
 	
 	// Reopen serial
 	return d.openSerial()
@@ -233,8 +233,31 @@ func (d *Display) SetBrightness(level int) error {
 // SetOrientation sets the display orientation.
 func (d *Display) SetOrientation(o Orientation) error {
 	d.orientation = o
-	// Orientation is encoded in x position
-	return d.sendCommand(cmdSetOrientation, int(o), 0, 0, 0)
+	
+	// Get dimensions for the orientation command
+	width := d.width
+	height := d.height
+	
+	// Rev A protocol uses a 16-byte command for orientation
+	// Bytes 0-5: standard header (coords + cmd)
+	// Byte 6: orientation + 100
+	// Bytes 7-8: width (big-endian)
+	// Bytes 9-10: height (big-endian)
+	buf := make([]byte, 16)
+	buf[0] = 0 // x >> 2
+	buf[1] = 0 // ((x & 3) << 6) + (y >> 4)
+	buf[2] = 0 // ((y & 15) << 4) + (ex >> 6)
+	buf[3] = 0 // ((ex & 63) << 2) + (ey >> 8)
+	buf[4] = 0 // ey & 255
+	buf[5] = cmdSetOrientation
+	buf[6] = byte(o) + 100
+	buf[7] = byte(width >> 8)
+	buf[8] = byte(width & 0xFF)
+	buf[9] = byte(height >> 8)
+	buf[10] = byte(height & 0xFF)
+	
+	_, err := d.port.Write(buf)
+	return err
 }
 
 // DrawImage draws an image at the specified position.
@@ -316,12 +339,17 @@ func (d *SimulatedDisplay) Height() int {
 
 func (d *SimulatedDisplay) DrawImage(img image.Image, x, y int) error { return nil }
 
+func (d *SimulatedDisplay) ScreenOn() error  { return nil }
+func (d *SimulatedDisplay) ScreenOff() error { return nil }
+
 // Screen interface for both real and simulated displays.
 type Screen interface {
 	io.Closer
 	Width() int
 	Height() int
 	DrawImage(img image.Image, x, y int) error
+	ScreenOn() error
+	ScreenOff() error
 }
 
 // Ensure both types implement Screen.

@@ -1,0 +1,28 @@
+# Turing Smart Screen LCD udev rules
+# Creates stable symlinks based on physical USB port paths
+#
+# Install: sudo cp 99-turing-lcd.rules /etc/udev/rules.d/
+# Reload: sudo udevadm control --reload-rules && sudo udevadm trigger
+#
+# After installation, use symlinks instead of /dev/ttyACM*:
+#   /dev/lcd-cpu    - CPU monitor display
+#   /dev/lcd-ram    - RAM monitor display  
+#   /dev/lcd-agent  - Agent status display
+#
+# NOTE: You MUST customize the KERNELS values below to match your system!
+# Run: udevadm info -a -n /dev/ttyACM0 | grep -E "KERNELS|idVendor|idProduct"
+# Look for the USB port identifier at the same level as idVendor (e.g., "3-4.4.1")
+
+# Match Turing Smart Screen devices by VID:PID and USB port path
+# VID 1a86 = QinHeng Electronics (CH340 chip manufacturer)
+# PID 5722 or 7523 = USB-Serial variants used in these displays
+
+# Example configuration (customize KERNELS to match your system):
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="5722", KERNELS=="3-4.4.1", SYMLINK+="lcd-cpu", MODE="0666"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="5722", KERNELS=="3-4.4.2", SYMLINK+="lcd-ram", MODE="0666"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="5722", KERNELS=="3-4.3", SYMLINK+="lcd-agent", MODE="0666"
+
+# Alternative: If your devices use PID 7523 instead of 5722, uncomment these:
+# SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", KERNELS=="CHANGE-ME", SYMLINK+="lcd-cpu", MODE="0666"
+# SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", KERNELS=="CHANGE-ME", SYMLINK+="lcd-ram", MODE="0666"
+# SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", KERNELS=="CHANGE-ME", SYMLINK+="lcd-agent", MODE="0666"

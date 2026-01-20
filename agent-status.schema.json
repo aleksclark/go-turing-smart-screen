@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/aleksclark/go-turing-smart-screen/agent-status.schema.json",
+  "title": "Agent Status",
+  "description": "Status reporting format for coding agents. Files stored in ~/.agent-status/{agent}-{instance}.json",
+  "type": "object",
+  "required": ["v", "agent", "instance", "status", "updated"],
+  "properties": {
+    "v": {
+      "type": "integer",
+      "const": 1,
+      "description": "Schema version (currently 1)"
+    },
+    "agent": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "Agent type identifier (lowercase, e.g., crush, cursor, claude-code, aider, copilot)"
+    },
+    "instance": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique instance identifier (PID, UUID prefix, or session hash)"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["idle", "thinking", "working", "waiting", "error", "done", "paused"],
+      "description": "Current agent status"
+    },
+    "updated": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix timestamp of last update"
+    },
+    "pid": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Process ID of the agent"
+    },
+    "project": {
+      "type": "string",
+      "description": "Project or repository name"
+    },
+    "cwd": {
+      "type": "string",
+      "description": "Current working directory"
+    },
+    "task": {
+      "type": "string",
+      "description": "Human-readable current task description"
+    },
+    "model": {
+      "type": "string",
+      "description": "AI model identifier (e.g., claude-sonnet-4-20250514, gpt-4o)"
+    },
+    "provider": {
+      "type": "string",
+      "enum": ["anthropic", "openai", "bedrock", "vertex", "ollama", "local", "azure", "google"],
+      "description": "API provider"
+    },
+    "tools": {
+      "type": "object",
+      "description": "Tool usage information",
+      "properties": {
+        "active": {
+          "type": ["string", "null"],
+          "description": "Currently executing tool (null if none)"
+        },
+        "recent": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 10,
+          "description": "Last N tools used (most recent last)"
+        },
+        "counts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": "Map of tool name to invocation count this session"
+        }
+      },
+      "additionalProperties": false
+    },
+    "tokens": {
+      "type": "object",
+      "description": "Token usage counters (cumulative for session)",
+      "properties": {
+        "input": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total input tokens consumed"
+        },
+        "output": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total output tokens generated"
+        },
+        "cache_read": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Tokens read from cache (Anthropic)"
+        },
+        "cache_write": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Tokens written to cache (Anthropic)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "cost_usd": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Estimated cost in USD for this session"
+    },
+    "started": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix timestamp when agent session started"
+    },
+    "error": {
+      "type": "string",
+      "description": "Error message (when status is 'error')"
+    },
+    "context": {
+      "type": "object",
+      "description": "Additional context (agent-specific, freeform)",
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "v": 1,
+      "agent": "crush",
+      "instance": "a1b2c3",
+      "pid": 12345,
+      "project": "turing-smart-screen-python",
+      "cwd": "/home/user/work/turing-smart-screen-python",
+      "status": "working",
+      "task": "implementing agent status monitor",
+      "model": "claude-sonnet-4-20250514",
+      "provider": "anthropic",
+      "tools": {
+        "active": "edit",
+        "recent": ["view", "grep", "edit"],
+        "counts": {
+          "edit": 5,
+          "view": 12,
+          "grep": 3,
+          "bash": 2
+        }
+      },
+      "tokens": {
+        "input": 125000,
+        "output": 15000,
+        "cache_read": 80000,
+        "cache_write": 45000
+      },
+      "cost_usd": 0.42,
+      "started": 1737276000,
+      "updated": 1737276300
+    },
+    {
+      "v": 1,
+      "agent": "cursor",
+      "instance": "d4e5f6",
+      "status": "idle",
+      "updated": 1737276400
+    }
+  ]
+}

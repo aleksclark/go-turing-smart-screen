@@ -6,6 +6,30 @@ A simple, UNIX-philosophy approach to coding agent status reporting using the fi
 
 Agents report their status by writing JSON files to a shared directory. Monitors read these files to display agent activity. No daemons, sockets, or infrastructure required.
 
+## Quick Start
+
+Write a status file:
+
+```bash
+mkdir -p ~/.agent-status
+cat > ~/.agent-status/my-agent-$$.json << 'EOF'
+{
+  "v": 1,
+  "agent": "my-agent",
+  "instance": "abc123",
+  "status": "working",
+  "task": "implementing feature",
+  "updated": $(date +%s)
+}
+EOF
+```
+
+Read active agents:
+
+```bash
+find ~/.agent-status -name '*.json' -mmin -5 -exec cat {} \; | jq -s '.[] | "\(.agent): \(.status)"'
+```
+
 ## Directory Structure
 
 ```
@@ -20,6 +44,60 @@ Agents report their status by writing JSON files to a shared directory. Monitors
 **Filename**: `{agent_type}-{instance_id}.json`
 - `agent_type`: lowercase identifier (e.g., `crush`, `cursor`, `claude-code`, `aider`, `copilot`)
 - `instance_id`: unique identifier for this instance (PID, UUID prefix, or session hash)
+
+## JSON Schema
+
+A formal JSON Schema is available at [`agent-status.schema.json`](./agent-status.schema.json).
+
+### Validation
+
+```bash
+# Using ajv-cli
+npx ajv validate -s agent-status.schema.json -d ~/.agent-status/*.json
+
+# Using check-jsonschema
+check-jsonschema --schemafile agent-status.schema.json ~/.agent-status/*.json
+
+# Using Go package
+go run github.com/aleksclark/go-turing-smart-screen/cmd/validate-status@latest ~/.agent-status/*.json
+```
+
+### Go API
+
+```go
+import "github.com/aleksclark/go-turing-smart-screen/pkg/agentstat"
+
+// Read all active agents (max 5 min old)
+statuses, _ := agentstat.ReadAll(5 * time.Minute)
+for _, s := range statuses {
+    fmt.Printf("%s: %s - %s\n", s.Agent, s.Status, s.Task)
+}
+
+// Read with error reporting for invalid files
+statuses, errors, _ := agentstat.ReadAllWithErrors(5 * time.Minute)
+for _, e := range errors {
+    log.Printf("invalid file %s: %v", e.File, e.Err)
+}
+
+// Validate a status struct
+status := agentstat.Status{
+    Version:  1,
+    Agent:    "my-agent",
+    Instance: "abc123",
+    Status:   "working",
+    Updated:  time.Now().Unix(),
+}
+if err := status.Validate(); err != nil {
+    log.Printf("validation error: %v", err)
+}
+
+// Get all validation errors at once
+if errs := status.ValidateAll(); len(errs) > 0 {
+    for _, err := range errs {
+        log.Printf("  %v", err)
+    }
+}
+```
 
 ## File Format
 

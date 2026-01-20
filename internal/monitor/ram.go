@@ -19,12 +19,10 @@ type RAMMonitor struct {
 
 // NewRAMMonitor creates a new RAM monitor.
 func NewRAMMonitor(screen lcd.Screen, brightness int, interval time.Duration, logger *slog.Logger) *RAMMonitor {
-	fonts := FontConfig{
-		Path:   "res/fonts/jetbrains-mono/JetBrainsMono-Regular.ttf",
-		Small:  16,
-		Normal: 18,
-		Large:  22,
-	}
+	fonts := DefaultFontConfig()
+	fonts.Small = 16
+	fonts.Normal = 18
+	fonts.Large = 22
 
 	base := NewBase(Config{
 		Screen:   screen,

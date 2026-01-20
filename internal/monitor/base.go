@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"image/draw"
 	"log/slog"
+	"os"
 	"time"
 
 	"github.com/fogleman/gg"
@@ -48,10 +49,48 @@ type FontConfig struct {
 	Large    float64
 }
 
+// fontSearchPaths lists common font locations to search.
+var fontSearchPaths = []string{
+	// JetBrains Mono (preferred)
+	"/usr/share/fonts/TTF/JetBrainsMono-Regular.ttf",
+	"/usr/share/fonts/jetbrains-mono/JetBrainsMono-Regular.ttf",
+	"/usr/share/fonts/truetype/jetbrains-mono/JetBrainsMono-Regular.ttf",
+	// DejaVu Sans Mono (common fallback)
+	"/usr/share/fonts/TTF/DejaVuSansMono.ttf",
+	"/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+	"/usr/share/fonts/dejavu/DejaVuSansMono.ttf",
+	// Liberation Mono
+	"/usr/share/fonts/TTF/LiberationMono-Regular.ttf",
+	"/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+	// Noto Sans Mono
+	"/usr/share/fonts/noto/NotoSansMono-Regular.ttf",
+	"/usr/share/fonts/truetype/noto/NotoSansMono-Regular.ttf",
+	// macOS
+	"/System/Library/Fonts/Monaco.ttf",
+	"/Library/Fonts/SF-Mono-Regular.otf",
+	// Windows
+	"C:/Windows/Fonts/consola.ttf",
+	"C:/Windows/Fonts/cour.ttf",
+}
+
+// findFont searches for an available monospace font.
+func findFont() string {
+	for _, path := range fontSearchPaths {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	return ""
+}
+
 // DefaultFontConfig returns the default font configuration.
 func DefaultFontConfig() FontConfig {
+	path := findFont()
+	if path == "" {
+		path = "/usr/share/fonts/TTF/DejaVuSansMono.ttf" // Fallback
+	}
 	return FontConfig{
-		Path:   "res/fonts/jetbrains-mono/JetBrainsMono-Regular.ttf",
+		Path:   path,
 		Small:  14,
 		Normal: 16,
 		Large:  20,
