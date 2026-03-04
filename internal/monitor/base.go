@@ -282,7 +282,7 @@ func (r *Renderer) DrawTextRight(x, y, width float64, text string, fontSize floa
 	r.dc.DrawString(text, x+width-tw, y+fontSize)
 }
 
-// DrawBar draws a progress bar.
+// DrawBar draws a horizontal progress bar.
 func (r *Renderer) DrawBar(reg Region, value, min, max float64, showBorder bool) {
 	// Background
 	r.dc.SetColor(r.colors.BarBG)
@@ -323,10 +323,52 @@ func (r *Renderer) DrawBar(reg Region, value, min, max float64, showBorder bool)
 	r.dc.Fill()
 }
 
+// DrawVerticalBar draws a vertical progress bar (fills from bottom to top).
+func (r *Renderer) DrawVerticalBar(reg Region, value, min, max float64) {
+	// Background
+	r.dc.SetColor(r.colors.BarBG)
+	r.dc.DrawRectangle(float64(reg.X), float64(reg.Y), float64(reg.W), float64(reg.H))
+	r.dc.Fill()
+
+	if value <= min {
+		return
+	}
+
+	// Calculate fill
+	pct := (value - min) / (max - min)
+	if pct > 1 {
+		pct = 1
+	}
+	fillH := float64(reg.H) * pct
+
+	// Color based on percentage
+	var c color.Color
+	switch {
+	case pct < 0.5:
+		c = r.colors.BarLow
+	case pct < 0.8:
+		c = r.colors.BarMed
+	default:
+		c = r.colors.BarHigh
+	}
+
+	// Draw from bottom up
+	r.dc.SetColor(c)
+	r.dc.DrawRectangle(float64(reg.X), float64(reg.Y)+float64(reg.H)-fillH, float64(reg.W), fillH)
+	r.dc.Fill()
+}
+
 // DrawLine draws a horizontal line.
 func (r *Renderer) DrawLine(x1, y, x2 float64) {
 	r.dc.SetColor(r.colors.Border)
 	r.dc.DrawLine(x1, y, x2, y)
+	r.dc.Stroke()
+}
+
+// DrawVerticalLine draws a vertical line.
+func (r *Renderer) DrawVerticalLine(x, y1, y2 float64) {
+	r.dc.SetColor(r.colors.Border)
+	r.dc.DrawLine(x, y1, x, y2)
 	r.dc.Stroke()
 }
 

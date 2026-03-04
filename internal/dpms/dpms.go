@@ -1,8 +1,9 @@
-// Package dpms provides monitor sleep state detection via DRM.
+// Package dpms provides monitor sleep state detection via DRM and systemd-logind.
 package dpms
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -40,8 +41,15 @@ func (s State) IsAsleep() bool {
 }
 
 // GetState returns the current DPMS state of any connected monitor.
-// Returns On if any monitor is on, otherwise returns the sleep state.
+// Checks both DRM DPMS state and systemd-logind IdleHint.
+// Returns On if any monitor is on and session is not idle, otherwise returns the sleep state.
 func GetState() State {
+	// Check systemd-logind IdleHint first (faster)
+	if isSessionIdle() {
+		return Off
+	}
+
+	// Check DRM DPMS state
 	matches, err := filepath.Glob("/sys/class/drm/card*-*/dpms")
 	if err != nil || len(matches) == 0 {
 		return Unknown
@@ -135,4 +143,24 @@ func (w *Watcher) Start() {
 // Stop stops watching.
 func (w *Watcher) Stop() {
 	close(w.stop)
+}
+
+// isSessionIdle checks if the systemd-logind session is idle.
+// This catches screen blanking/locking that may not be reflected in DPMS.
+func isSessionIdle() bool {
+	// Try loginctl show-session to get IdleHint
+	cmd := exec.Command("loginctl", "show-session", "-p", "IdleHint")
+	output, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+
+	// Output format: "IdleHint=yes" or "IdleHint=no"
+	line := strings.TrimSpace(string(output))
+	if strings.HasPrefix(line, "IdleHint=") {
+		value := strings.TrimPrefix(line, "IdleHint=")
+		return value == "yes"
+	}
+
+	return false
 }

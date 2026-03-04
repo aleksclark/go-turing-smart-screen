@@ -2,14 +2,20 @@
 package sysinfo
 
 import (
+	"fmt"
+	"os"
 	"regexp"
+	"runtime"
 	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
 
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/load"
 	"github.com/shirou/gopsutil/v3/mem"
-	"github.com/shirou/gopsutil/v3/process"
 )
 
 // CPUInfo holds CPU information.
@@ -60,16 +66,20 @@ func GetCPUInfo() (*CPUInfo, error) {
 	temps, err := host.SensorsTemperatures()
 	if err == nil {
 		for _, t := range temps {
-			// Look for CPU temp sensors
-			if t.SensorKey == "coretemp" || t.SensorKey == "k10temp" ||
-				t.SensorKey == "cpu_thermal" || t.SensorKey == "zenpower" {
+			// Look for CPU temp sensors (use prefix matching - gopsutil returns keys like "k10temp_tctl")
+			if hasPrefixAny(t.SensorKey, "coretemp", "k10temp", "cpu_thermal", "zenpower", "cpu-thermal") {
 				info.Temp = t.Temperature
 				break
 			}
 		}
-		// Fallback to first sensor if no CPU sensor found
-		if info.Temp == 0 && len(temps) > 0 {
-			info.Temp = temps[0].Temperature
+		// Fallback: skip ACPI thermal zones (often ambient temp), use first non-ACPI sensor
+		if info.Temp == 0 {
+			for _, t := range temps {
+				if !hasPrefixAny(t.SensorKey, "acpitz", "thermal_zone") {
+					info.Temp = t.Temperature
+					break
+				}
+			}
 		}
 	}
 
@@ -85,6 +95,7 @@ type MemInfo struct {
 	SwapTotal   uint64
 	SwapUsed    uint64
 	SwapPercent float64
+	ZswapUsed   uint64 // Zswap compressed pool size (like htop shows)
 }
 
 // GetMemInfo returns current memory information.
@@ -110,7 +121,29 @@ func GetMemInfo() (*MemInfo, error) {
 		}
 	}
 
+	// Read zswap usage (like htop 3.3+ shows)
+	info.ZswapUsed = readZswapUsed()
+
 	return info, nil
+}
+
+// readZswapUsed reads the zswap compressed pool size from /proc/meminfo
+func readZswapUsed() uint64 {
+	data, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return 0
+	}
+
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(line, "Zswap:") {
+			fields := strings.Fields(line)
+			if len(fields) >= 2 {
+				kb, _ := strconv.ParseUint(fields[1], 10, 64)
+				return kb * 1024 // Convert KB to bytes
+			}
+		}
+	}
+	return 0
 }
 
 // ProcessMemInfo holds memory info for a process group.
@@ -152,40 +185,52 @@ func getProcessGroup(name string) string {
 }
 
 // GetTopProcesses returns the top N processes by memory usage.
+// Reads /proc directly to avoid expensive gopsutil calls.
 func GetTopProcesses(n int) ([]ProcessMemInfo, error) {
-	procs, err := process.Processes()
+	entries, err := os.ReadDir("/proc")
 	if err != nil {
 		return nil, err
 	}
 
-	// Aggregate by group
-	groups := make(map[string]*ProcessMemInfo)
-	
 	memInfo, err := mem.VirtualMemory()
 	if err != nil {
 		return nil, err
 	}
 	totalMem := memInfo.Total
 
-	for _, p := range procs {
-		name, err := p.Name()
-		if err != nil {
+	// Aggregate by group
+	groups := make(map[string]*ProcessMemInfo)
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
 			continue
 		}
-		
-		meminfo, err := p.MemoryInfo()
+		pid := 0
+		for _, c := range entry.Name() {
+			if c < '0' || c > '9' {
+				pid = -1
+				break
+			}
+			pid = pid*10 + int(c-'0')
+		}
+		if pid <= 0 {
+			continue
+		}
+
+		// Read /proc/[pid]/statm for memory (much faster than /proc/[pid]/status)
+		name, rss, err := readProcStatm(pid)
 		if err != nil {
 			continue
 		}
 
 		group := getProcessGroup(name)
 		if g, ok := groups[group]; ok {
-			g.RSS += meminfo.RSS
+			g.RSS += rss
 			g.Count++
 		} else {
 			groups[group] = &ProcessMemInfo{
 				Name:  group,
-				RSS:   meminfo.RSS,
+				RSS:   rss,
 				Count: 1,
 			}
 		}
@@ -208,6 +253,33 @@ func GetTopProcesses(n int) ([]ProcessMemInfo, error) {
 	}
 
 	return result, nil
+}
+
+// readProcStatm reads /proc/[pid]/statm and /proc/[pid]/comm for memory info
+func readProcStatm(pid int) (name string, rss uint64, err error) {
+	// Read name from comm (simpler than parsing stat)
+	nameData, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", pid))
+	if err != nil {
+		return "", 0, err
+	}
+	name = strings.TrimSpace(string(nameData))
+
+	// Read statm: size resident shared text lib data dt
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/statm", pid))
+	if err != nil {
+		return "", 0, err
+	}
+
+	fields := strings.Fields(string(data))
+	if len(fields) < 2 {
+		return "", 0, fmt.Errorf("invalid statm")
+	}
+
+	// resident is in pages, convert to bytes (page size is typically 4096)
+	pages, _ := strconv.ParseUint(fields[1], 10, 64)
+	rss = pages * 4096
+
+	return name, rss, nil
 }
 
 // FormatBytes formats bytes to human-readable string.
@@ -251,4 +323,242 @@ func itoa(i int) string {
 		i /= 10
 	}
 	return s
+}
+
+// hasPrefixAny returns true if s has any of the given prefixes.
+func hasPrefixAny(s string, prefixes ...string) bool {
+	for _, p := range prefixes {
+		if len(s) >= len(p) && s[:len(p)] == p {
+			return true
+		}
+	}
+	return false
+}
+
+// ProcessCPUInfo holds CPU usage info for a process group.
+type ProcessCPUInfo struct {
+	Name    string
+	Percent float64
+	Count   int
+}
+
+// cpuTimesCache caches process CPU times for delta calculation
+var (
+	cpuTimesCache     = make(map[int]procStat) // pid -> stat
+	cpuTimesCacheMu   sync.Mutex
+	lastCPUSampleTime time.Time
+	numCPU            = float64(runtime.NumCPU())
+	clockTicks        = float64(100) // Linux default, could read from sysconf
+)
+
+type procStat struct {
+	name  string
+	utime uint64
+	stime uint64
+}
+
+// GetTopProcessesByCPU returns the top N processes by CPU usage.
+// Reads /proc directly to avoid expensive gopsutil calls.
+func GetTopProcessesByCPU(n int) ([]ProcessCPUInfo, error) {
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now()
+	cpuTimesCacheMu.Lock()
+	defer cpuTimesCacheMu.Unlock()
+
+	elapsed := now.Sub(lastCPUSampleTime).Seconds()
+	if elapsed < 0.1 {
+		elapsed = 0.1
+	}
+
+	groups := make(map[string]*ProcessCPUInfo)
+	newCache := make(map[int]procStat)
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		pid := 0
+		for _, c := range entry.Name() {
+			if c < '0' || c > '9' {
+				pid = -1
+				break
+			}
+			pid = pid*10 + int(c-'0')
+		}
+		if pid <= 0 {
+			continue
+		}
+
+		// Read /proc/[pid]/stat
+		stat, err := readProcStat(pid)
+		if err != nil {
+			continue
+		}
+		newCache[pid] = stat
+
+		// Calculate CPU percent from delta
+		var cpuPct float64
+		if prev, ok := cpuTimesCache[pid]; ok && elapsed > 0 {
+			udelta := stat.utime - prev.utime
+			sdelta := stat.stime - prev.stime
+			totalDelta := float64(udelta+sdelta) / clockTicks
+			cpuPct = (totalDelta / elapsed) * 100.0
+		}
+
+		if cpuPct < 0.1 {
+			continue
+		}
+
+		group := getProcessGroup(stat.name)
+		if g, ok := groups[group]; ok {
+			g.Percent += cpuPct
+			g.Count++
+		} else {
+			groups[group] = &ProcessCPUInfo{
+				Name:    group,
+				Percent: cpuPct,
+				Count:   1,
+			}
+		}
+	}
+
+	cpuTimesCache = newCache
+	lastCPUSampleTime = now
+
+	result := make([]ProcessCPUInfo, 0, len(groups))
+	for _, g := range groups {
+		result = append(result, *g)
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Percent > result[j].Percent
+	})
+
+	if len(result) > n {
+		result = result[:n]
+	}
+
+	return result, nil
+}
+
+// readProcStat reads /proc/[pid]/stat and extracts name, utime, stime
+func readProcStat(pid int) (procStat, error) {
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		return procStat{}, err
+	}
+
+	// Format: pid (name) state ppid pgrp session tty_nr tpgid flags
+	//         minflt cminflt majflt cmajflt utime stime ...
+	// Find the name between ( and )
+	start := -1
+	end := -1
+	for i, c := range data {
+		if c == '(' && start == -1 {
+			start = i + 1
+		}
+		if c == ')' {
+			end = i
+		}
+	}
+	if start == -1 || end == -1 || end <= start {
+		return procStat{}, fmt.Errorf("invalid stat format")
+	}
+
+	name := string(data[start:end])
+
+	// Parse fields after the name
+	fields := strings.Fields(string(data[end+2:])) // skip ") "
+	if len(fields) < 13 {
+		return procStat{}, fmt.Errorf("not enough fields")
+	}
+
+	// utime is field 11 (0-indexed), stime is field 12 (after the name)
+	// But we skipped "pid (name) ", so utime is index 11, stime is 12
+	utime, _ := strconv.ParseUint(fields[11], 10, 64)
+	stime, _ := strconv.ParseUint(fields[12], 10, 64)
+
+	return procStat{name: name, utime: utime, stime: stime}, nil
+}
+
+// TempInfo holds temperature sensor information.
+type TempInfo struct {
+	Label string
+	Temp  float64
+}
+
+// GetTemperatures returns categorized temperature readings.
+func GetTemperatures() ([]TempInfo, error) {
+	temps, err := host.SensorsTemperatures()
+	if err != nil {
+		return nil, err
+	}
+
+	var result []TempInfo
+
+	// Map of sensor prefixes to friendly labels
+	sensorLabels := map[string]string{
+		"k10temp_tctl":    "CPU",
+		"k10temp_tccd":    "CCD",
+		"coretemp_core":   "Core",
+		"coretemp_pack":   "CPU",
+		"nvme_composite":  "NVMe",
+		"nvme_sensor":     "NVMe",
+		"amdgpu_edge":     "GPU",
+		"amdgpu_junction": "GPU Hot",
+		"amdgpu_mem":      "VRAM",
+		"nouveau":         "GPU",
+		"radeon":          "GPU",
+		"iwlwifi":         "WiFi",
+		"mt7921":          "WiFi",
+		"r8169":           "NIC",
+	}
+
+	seen := make(map[string]bool)
+
+	for _, t := range temps {
+		if t.Temperature <= 0 || t.Temperature > 150 {
+			continue // Skip invalid readings
+		}
+
+		// Skip ACPI thermal zones (often inaccurate)
+		if hasPrefixAny(t.SensorKey, "acpitz", "thermal_zone") {
+			continue
+		}
+
+		// Find matching label
+		label := ""
+		for prefix, lbl := range sensorLabels {
+			if hasPrefixAny(t.SensorKey, prefix) {
+				label = lbl
+				break
+			}
+		}
+
+		if label == "" {
+			continue // Skip unknown sensors
+		}
+
+		// Deduplicate by label (take first/hottest)
+		if seen[label] {
+			continue
+		}
+		seen[label] = true
+
+		result = append(result, TempInfo{
+			Label: label,
+			Temp:  t.Temperature,
+		})
+	}
+
+	// Sort by label alphabetically
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Label < result[j].Label
+	})
+
+	return result, nil
 }

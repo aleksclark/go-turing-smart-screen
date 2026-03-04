@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -371,10 +372,7 @@ func ReadAllWithErrors(maxAge time.Duration) ([]Status, []ReadError, error) {
 		statuses = append(statuses, s)
 	}
 
-	// Sort by updated time (most recent first)
-	sort.Slice(statuses, func(i, j int) bool {
-		return statuses[i].Updated > statuses[j].Updated
-	})
+	SortStatuses(statuses)
 
 	return statuses, readErrors, nil
 }
@@ -417,6 +415,35 @@ func Cleanup(maxAge time.Duration) error {
 	}
 
 	return nil
+}
+
+// StatusOrbPriority returns the sort priority for a status based on its orb color.
+// Lower values sort first: red/yellow (0), green/blue/teal (1), grey (2).
+func StatusOrbPriority(status string, stale bool) int {
+	if stale {
+		return 2
+	}
+	switch status {
+	case "error", "thinking", "paused":
+		return 0
+	case "working", "done", "waiting":
+		return 1
+	default:
+		return 2
+	}
+}
+
+// SortStatuses sorts agent statuses by orb color priority (red/yellow first,
+// then green, then grey), then alphabetically by title (agent name).
+func SortStatuses(statuses []Status) {
+	sort.Slice(statuses, func(i, j int) bool {
+		pi := StatusOrbPriority(statuses[i].Status, statuses[i].Stale)
+		pj := StatusOrbPriority(statuses[j].Status, statuses[j].Stale)
+		if pi != pj {
+			return pi < pj
+		}
+		return strings.ToLower(statuses[i].Agent) < strings.ToLower(statuses[j].Agent)
+	})
 }
 
 // FormatTokens formats a token count for display.

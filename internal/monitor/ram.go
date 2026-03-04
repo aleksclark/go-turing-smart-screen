@@ -147,24 +147,35 @@ func (m *RAMMonitor) update() error {
 		updates = append(updates, reg)
 	}
 
-	// Swap label
+	// Swap label (now shows zswap like htop)
 	if m.Changed("swap_label", true) {
-		reg := Region{5, 75, 45, 20}
+		reg := Region{5, 75, 50, 20}
 		r.Clear(reg)
-		r.DrawText(float64(reg.X), float64(reg.Y), "Swap", m.fonts.Normal, m.Colors().TextDim)
+		r.DrawText(float64(reg.X), float64(reg.Y), "Zswp", m.fonts.Normal, m.Colors().TextDim)
 		updates = append(updates, reg)
 	}
 
-	// Swap bar
-	if m.ChangedFloat("swap_pct", memInfo.SwapPercent, 0.5) {
+	// Swap bar - use zswap if available, fallback to disk swap
+	swapUsed := memInfo.ZswapUsed
+	if swapUsed == 0 {
+		swapUsed = memInfo.SwapUsed
+	}
+	// Calculate percentage against swap partition total
+	var swapPct float64
+	if memInfo.SwapTotal > 0 {
+		swapPct = float64(swapUsed) / float64(memInfo.SwapTotal) * 100
+	}
+	if m.ChangedFloat("swap_pct", swapPct, 0.5) {
 		reg := Region{55, 75, m.Width() - 180, 20}
-		r.DrawBar(reg, memInfo.SwapPercent, 0, 100, true)
+		r.DrawBar(reg, swapPct, 0, 100, true)
 		updates = append(updates, reg)
 	}
 
 	// Swap text
 	var swapText string
-	if memInfo.SwapTotal > 0 {
+	if memInfo.ZswapUsed > 0 {
+		swapText = fmt.Sprintf("%s / %s", sysinfo.FormatBytes(memInfo.ZswapUsed), sysinfo.FormatBytes(memInfo.SwapTotal))
+	} else if memInfo.SwapTotal > 0 {
 		swapText = fmt.Sprintf("%s / %s", sysinfo.FormatBytes(memInfo.SwapUsed), sysinfo.FormatBytes(memInfo.SwapTotal))
 	} else {
 		swapText = "No swap"
