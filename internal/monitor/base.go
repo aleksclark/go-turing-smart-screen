@@ -282,6 +282,16 @@ func (r *Renderer) DrawTextRight(x, y, width float64, text string, fontSize floa
 	r.dc.DrawString(text, x+width-tw, y+fontSize)
 }
 
+// DrawTextCenter draws centered text within a given region.
+func (r *Renderer) DrawTextCenter(x, y, width float64, text string, fontSize float64, c color.Color) {
+	if err := r.dc.LoadFontFace(r.fonts.Path, fontSize); err != nil {
+		return
+	}
+	tw, _ := r.dc.MeasureString(text)
+	r.dc.SetColor(c)
+	r.dc.DrawString(text, x+(width-tw)/2, y+fontSize)
+}
+
 // DrawBar draws a horizontal progress bar.
 func (r *Renderer) DrawBar(reg Region, value, min, max float64, showBorder bool) {
 	// Background

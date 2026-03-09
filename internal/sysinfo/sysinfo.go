@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/load"
 	"github.com/shirou/gopsutil/v3/mem"
@@ -483,6 +484,28 @@ func readProcStat(pid int) (procStat, error) {
 	stime, _ := strconv.ParseUint(fields[12], 10, 64)
 
 	return procStat{name: name, utime: utime, stime: stime}, nil
+}
+
+// DiskInfo holds disk usage information.
+type DiskInfo struct {
+	Total       uint64
+	Used        uint64
+	Free        uint64
+	UsedPercent float64
+}
+
+// GetDiskUsage returns disk usage for the root filesystem.
+func GetDiskUsage() (*DiskInfo, error) {
+	usage, err := disk.Usage("/")
+	if err != nil {
+		return nil, err
+	}
+	return &DiskInfo{
+		Total:       usage.Total,
+		Used:        usage.Used,
+		Free:        usage.Free,
+		UsedPercent: usage.UsedPercent,
+	}, nil
 }
 
 // TempInfo holds temperature sensor information.

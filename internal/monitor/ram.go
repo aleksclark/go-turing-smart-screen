@@ -147,43 +147,47 @@ func (m *RAMMonitor) update() error {
 		updates = append(updates, reg)
 	}
 
-	// Swap label (now shows zswap like htop)
-	if m.Changed("swap_label", true) {
-		reg := Region{5, 75, 50, 20}
-		r.Clear(reg)
-		r.DrawText(float64(reg.X), float64(reg.Y), "Zswp", m.fonts.Normal, m.Colors().TextDim)
-		updates = append(updates, reg)
-	}
-
-	// Swap bar - use zswap if available, fallback to disk swap
+	// Zswp bar (left half) with label and usage overlaid
+	halfW := (m.Width() - 15) / 2 // 5px margin each side + 5px gap
 	swapUsed := memInfo.ZswapUsed
 	if swapUsed == 0 {
 		swapUsed = memInfo.SwapUsed
 	}
-	// Calculate percentage against swap partition total
 	var swapPct float64
 	if memInfo.SwapTotal > 0 {
 		swapPct = float64(swapUsed) / float64(memInfo.SwapTotal) * 100
 	}
-	if m.ChangedFloat("swap_pct", swapPct, 0.5) {
-		reg := Region{55, 75, m.Width() - 180, 20}
+	var swapText string
+	if memInfo.ZswapUsed > 0 {
+		swapText = fmt.Sprintf("Zswp %s/%s", sysinfo.FormatBytes(memInfo.ZswapUsed), sysinfo.FormatBytes(memInfo.SwapTotal))
+	} else if memInfo.SwapTotal > 0 {
+		swapText = fmt.Sprintf("Zswp %s/%s", sysinfo.FormatBytes(memInfo.SwapUsed), sysinfo.FormatBytes(memInfo.SwapTotal))
+	} else {
+		swapText = "Zswp N/A"
+	}
+	swapKey := fmt.Sprintf("%.1f_%s", swapPct, swapText)
+	if m.Changed("swap_bar", swapKey) {
+		reg := Region{5, 75, halfW, 24}
 		r.DrawBar(reg, swapPct, 0, 100, true)
+		r.DrawTextCenter(float64(reg.X), float64(reg.Y+2), float64(reg.W), swapText, m.fonts.Small, m.Colors().Text)
 		updates = append(updates, reg)
 	}
 
-	// Swap text
-	var swapText string
-	if memInfo.ZswapUsed > 0 {
-		swapText = fmt.Sprintf("%s / %s", sysinfo.FormatBytes(memInfo.ZswapUsed), sysinfo.FormatBytes(memInfo.SwapTotal))
-	} else if memInfo.SwapTotal > 0 {
-		swapText = fmt.Sprintf("%s / %s", sysinfo.FormatBytes(memInfo.SwapUsed), sysinfo.FormatBytes(memInfo.SwapTotal))
+	// Disk bar (right half) with label and usage overlaid
+	diskInfo, diskErr := sysinfo.GetDiskUsage()
+	var diskPct float64
+	var diskText string
+	if diskErr == nil {
+		diskPct = diskInfo.UsedPercent
+		diskText = fmt.Sprintf("Disk %s/%s", sysinfo.FormatBytes(diskInfo.Used), sysinfo.FormatBytes(diskInfo.Total))
 	} else {
-		swapText = "No swap"
+		diskText = "Disk N/A"
 	}
-	if m.Changed("swap_text", swapText) {
-		reg := Region{m.Width() - 120, 75, 115, 20}
-		r.Clear(reg)
-		r.DrawTextRight(float64(reg.X), float64(reg.Y), float64(reg.W), swapText, m.fonts.Normal, m.Colors().TextDim)
+	diskKey := fmt.Sprintf("%.1f_%s", diskPct, diskText)
+	if m.Changed("disk_bar", diskKey) {
+		reg := Region{5 + halfW + 5, 75, halfW, 24}
+		r.DrawBar(reg, diskPct, 0, 100, true)
+		r.DrawTextCenter(float64(reg.X), float64(reg.Y+2), float64(reg.W), diskText, m.fonts.Small, m.Colors().Text)
 		updates = append(updates, reg)
 	}
 
