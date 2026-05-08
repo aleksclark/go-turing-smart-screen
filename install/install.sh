@@ -82,7 +82,7 @@ configure_udev() {
     
     local cpu_port="" ram_port="" agent_port=""
     local monitors=("cpu" "ram" "agent")
-    local monitor_names=("CPU Monitor (htop-style)" "RAM Monitor (memory usage)" "Agent Monitor (coding agents)")
+    local monitor_names=("CPU Monitor (htop-style)" "RAM Monitor (memory usage)" "Net Monitor (internet health)")
     
     for i in "${!monitors[@]}"; do
         echo "Available devices for ${monitor_names[$i]}:"
@@ -137,7 +137,7 @@ generate_udev_rules() {
 # Symlinks created:
 #   /dev/lcd-cpu    - CPU monitor display
 #   /dev/lcd-ram    - RAM monitor display
-#   /dev/lcd-agent  - Agent status display
+#   /dev/lcd-agent  - Internet health display
 
 SUBSYSTEM!="tty", GOTO="turing_lcd_end"
 ATTRS{idVendor}!="1a86", GOTO="turing_lcd_end"

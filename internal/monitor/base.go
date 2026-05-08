@@ -292,6 +292,33 @@ func (r *Renderer) DrawTextCenter(x, y, width float64, text string, fontSize flo
 	r.dc.DrawString(text, x+(width-tw)/2, y+fontSize)
 }
 
+// DrawBarWithColor draws a horizontal progress bar with an explicit fill color.
+func (r *Renderer) DrawBarWithColor(reg Region, value, min, max float64, showBorder bool, fillColor color.Color) {
+	r.dc.SetColor(r.colors.BarBG)
+	r.dc.DrawRectangle(float64(reg.X), float64(reg.Y), float64(reg.W), float64(reg.H))
+	r.dc.Fill()
+
+	if showBorder {
+		r.dc.SetColor(r.colors.Border)
+		r.dc.DrawRectangle(float64(reg.X), float64(reg.Y), float64(reg.W), float64(reg.H))
+		r.dc.Stroke()
+	}
+
+	if value <= min {
+		return
+	}
+
+	pct := (value - min) / (max - min)
+	if pct > 1 {
+		pct = 1
+	}
+	fillW := float64(reg.W-2) * pct
+
+	r.dc.SetColor(fillColor)
+	r.dc.DrawRectangle(float64(reg.X+1), float64(reg.Y+1), fillW, float64(reg.H-2))
+	r.dc.Fill()
+}
+
 // DrawBar draws a horizontal progress bar.
 func (r *Renderer) DrawBar(reg Region, value, min, max float64, showBorder bool) {
 	// Background

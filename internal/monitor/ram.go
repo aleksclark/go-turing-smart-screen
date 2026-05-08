@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"fmt"
+	"image/color"
 	"log/slog"
 	"time"
 
@@ -177,16 +178,27 @@ func (m *RAMMonitor) update() error {
 	diskInfo, diskErr := sysinfo.GetDiskUsage()
 	var diskPct float64
 	var diskText string
+	var diskBarColor color.Color
 	if diskErr == nil {
 		diskPct = diskInfo.UsedPercent
 		diskText = fmt.Sprintf("Disk %s/%s", sysinfo.FormatBytes(diskInfo.Used), sysinfo.FormatBytes(diskInfo.Total))
+		freeGB := float64(diskInfo.Free) / (1024 * 1024 * 1024)
+		switch {
+		case freeGB < 1:
+			diskBarColor = m.Colors().BarHigh
+		case freeGB < 100:
+			diskBarColor = m.Colors().BarMed
+		default:
+			diskBarColor = m.Colors().BarLow
+		}
 	} else {
 		diskText = "Disk N/A"
+		diskBarColor = m.Colors().BarLow
 	}
 	diskKey := fmt.Sprintf("%.1f_%s", diskPct, diskText)
 	if m.Changed("disk_bar", diskKey) {
 		reg := Region{5 + halfW + 5, 75, halfW, 24}
-		r.DrawBar(reg, diskPct, 0, 100, true)
+		r.DrawBarWithColor(reg, diskPct, 0, 100, true, diskBarColor)
 		r.DrawTextCenter(float64(reg.X), float64(reg.Y+2), float64(reg.W), diskText, m.fonts.Small, m.Colors().Text)
 		updates = append(updates, reg)
 	}
