@@ -5,7 +5,7 @@ System monitor displays for Turing Smart Screen USB-C LCD panels, written in Go.
 ## Project Overview
 
 **Purpose**: Display real-time system information on Turing Smart Screen USB-C LCD panels  
-**Language**: Go 1.22  
+**Language**: Go 1.26.6
 **Target Platform**: Linux (primary), Windows, macOS  
 **Hardware**: Turing Smart Screen 3.5" Rev A protocol displays
 
@@ -639,5 +639,5 @@ These are potential improvements, not current features:
 ---
 
 **Last Updated**: January 2026  
-**Go Version**: 1.22  
+**Go Version**: 1.26.6
 **Schema Version**: 1
