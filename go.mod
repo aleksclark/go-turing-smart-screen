@@ -1,6 +1,6 @@
 module github.com/aleksclark/go-turing-smart-screen
 
-go 1.25.0
+go 1.26.6
 
 require (
 	github.com/fogleman/gg v1.3.0
